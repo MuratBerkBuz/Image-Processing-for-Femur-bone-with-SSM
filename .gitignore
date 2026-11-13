@@ -10,3 +10,13 @@ venv/
 .ipynb_checkpoints/
 .DS_Store
 Thumbs.db
+# data (not shared)
+Femur_SSM*/
+Tibia_SSM*/
+data_*/
+new_bones_to_be_reconstructed/
+results/
+# python
+__pycache__/
+.pytest_cache/
+.idea/
