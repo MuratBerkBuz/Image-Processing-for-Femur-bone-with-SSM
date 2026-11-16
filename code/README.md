@@ -10,9 +10,9 @@ python bone_reconstruction_app.py
 
 1. Choose the femur or the tibia.
 2. Enter the x y z coordinates (mm) of each landmark, all measured in the same coordinate system (e.g. one CT scan). Selecting a row shows where the landmark lies on the 3D bone and how to find it. Values can be typed, pasted (several rows at once), or loaded from a file.
-3. The reconstructed bone is shown in the coordinate system of the entered landmarks and saved to `../results/reconstructions/<bone>_<date>_<time>.stl`, together with the entered landmarks. "Save STL as…" stores a copy elsewhere.
+3. The reconstructed bone is shown in the coordinate system of the entered landmarks and saved to `../results/reconstructions/` as `NNN_[<input file>_]<Bone>_<L|R>_reconstructed.stl`, e.g. `001_Tibia_L_reconstructed.stl` or, with landmarks loaded from `z036.txt`, `002_z036_Tibia_L_reconstructed.stl`. NNN counts up from the highest number already in the folder. The entered landmarks are saved next to it as `..._landmarks.txt`. "Save STL as…" stores a copy elsewhere.
 
-The app uses the size-preserving models (`*_SSM_prealigned`). It estimates the bone's pose with a rigid fit and recognises a bone from the other body side by the handedness of its landmarks. In that case it reconstructs the mirror image and says so. It warns about a landmark far from the fitted bone (> 8 mm), a likely wrong landmark order, a shape outside the training range, and a size that suggests wrong units.
+The app uses the size-preserving models (`*_SSM_prealigned`): a left femur model and a right tibia model (`side` in `landmark_guide.json`). It estimates the bone's pose with a rigid fit and detects whether the bone is left or right from the handedness of its landmarks. A bone from the other side is reconstructed by mirroring the model, and the app says so. The side can also be set by hand (Body side: Left / Right). It warns about a landmark far from the fitted bone (> 8 mm), a likely wrong landmark order, a shape outside the training range, and a size that suggests wrong units.
 
 Two example inputs are in `examples/`. Open the app on one directly with:
 

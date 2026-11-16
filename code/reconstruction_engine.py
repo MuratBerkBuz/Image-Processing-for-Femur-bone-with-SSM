@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,6 +36,8 @@ RESIDUAL_WARN_MM = 8.0         # fitted bone further than this from an entered l
 OUTLIER_SD = 3.0               # shape parameter beyond this many SD of the training bones
 MIN_SEPARATION_MM = 5.0        # two landmarks closer than this are almost certainly a typo
 MIRROR = np.diag([-1.0, 1.0, 1.0])
+SIDE_NAMES = {"L": "left", "R": "right"}
+OTHER_SIDE = {"L": "R", "R": "L"}
 
 
 def handedness(lm: np.ndarray) -> float:
@@ -75,6 +78,20 @@ def parse_landmark_text(text: str, n_expected: int | None = None) -> np.ndarray:
     return np.asarray(rows, dtype=float).reshape(-1, 3)
 
 
+def output_paths(directory, bone: str, side: str, input_name: str | None = None) -> tuple[Path, Path]:
+    """File names for a reconstruction: NNN[_<input>]_<Bone>_<L|R>_reconstructed.stl and the
+    matching _landmarks.txt. NNN is one more than the highest number already in ``directory``."""
+    directory = Path(directory)
+    numbers = [int(m.group(1)) for f in directory.glob("*_reconstructed.stl")
+               if (m := re.match(r"(\d+)_", f.name))] if directory.is_dir() else []
+    parts = [f"{max(numbers, default=0) + 1:03d}"]
+    if input_name:
+        parts.append(re.sub(r"[^A-Za-z0-9.-]+", "_", input_name).strip("_"))
+    parts += [bone, side]
+    base = "_".join(p for p in parts if p)
+    return directory / f"{base}_reconstructed.stl", directory / f"{base}_landmarks.txt"
+
+
 @dataclass
 class Landmark:
     code: str
@@ -93,7 +110,8 @@ class Reconstruction:
     shape_sd: np.ndarray        # shape parameters in SD of the training bones
     to_model: np.ndarray        # 4x4 (mirrored, if `mirrored`) entered frame -> model frame
     codes: list[str]
-    mirrored: bool = False      # bone from the other side: fitted mirrored, result mirrored back
+    side: str = ""              # body side of the reconstructed bone: "L" or "R"
+    mirrored: bool = False      # other side than the model: fitted mirrored, result mirrored back
     warnings: list[str] = field(default_factory=list)   # something looks wrong
     notes: list[str] = field(default_factory=list)      # information the user must be aware of
 
@@ -116,6 +134,10 @@ class BoneReconstructor:
         cfg = guide[bone]
         self.bone, self.lam, self.view = bone, lam, cfg.get("view", {})
         self.description = cfg.get("description", "")
+        self.model_side = cfg.get("side")
+        if self.model_side not in SIDE_NAMES:
+            raise ValueError(f"{GUIDE_FILE.name}: {bone} needs \"side\": \"L\" or \"R\" (the side of its "
+                             f"training bones), not {self.model_side!r}")
         self.model_dir = Path(model_dir) if model_dir else ROOT / cfg["model_dir"]
 
         subjects, shapes = load_cohort(self.model_dir)
@@ -222,14 +244,16 @@ class BoneReconstructor:
         return warnings
 
     # ------------------------------------------------------------------ reconstruction
+    def side_label(self, side: str) -> str:
+        """'left femur', 'right tibia', ..."""
+        return f"{SIDE_NAMES[side]} {self.bone.lower()}"
+
     def reconstruct(self, landmarks, side: str = "auto") -> Reconstruction:
-        """side: 'auto' (detect from handedness), 'model' (as entered) or 'other' (mirror)."""
+        """side: 'auto' (detect from the landmark handedness), 'L' or 'R'."""
         lm = self.validate(landmarks)
-        if side not in ("auto", "model", "other"):
-            raise ValueError(f"side must be 'auto', 'model' or 'other', not {side!r}")
-        mirrored = {"auto": None, "model": False, "other": True}[side]
-        if mirrored is None:
-            mirrored = self.is_other_side(lm)
+        if side not in ("auto", "L", "R"):
+            raise ValueError(f"side must be 'auto', 'L' or 'R', not {side!r}")
+        mirrored = self.is_other_side(lm) if side == "auto" else side != self.model_side
         lm_fit = lm @ MIRROR if mirrored else lm
         warnings = self.check_landmarks(lm_fit)
         fit, _, mesh, to_model = fit_and_warp(self.model, lm_fit, self.selector, self.lam, self.reference,
@@ -249,14 +273,16 @@ class BoneReconstructor:
         if abs(shape_sd[k]) > OUTLIER_SD:
             warnings.append(f"The shape is outside the range of the training bones (mode {k + 1} at "
                             f"{shape_sd[k]:+.1f} SD). The result is an extrapolation.")
+        bone_side = OTHER_SIDE[self.model_side] if mirrored else self.model_side
         notes = []
         if mirrored:
             how = "detected from the landmark positions" if side == "auto" else "as selected"
-            notes.append(f"Reconstructed as the mirror image of the model ({self.description}): the bone is "
-                         f"from the other body side ({how}). If it is not, two landmarks on opposite sides "
-                         f"may be swapped (e.g. {self.side_pair_hint()}).")
+            notes.append(f"Reconstructed as a {self.side_label(bone_side)} ({how}) by mirroring the "
+                         f"{self.side_label(self.model_side)} model. If the bone is a "
+                         f"{self.side_label(self.model_side)}, two landmarks on opposite sides may be swapped "
+                         f"(e.g. {self.side_pair_hint()}).")
         return Reconstruction(self.bone, mesh, lm, fitted, residuals, shape_sd, to_model, self.codes,
-                              mirrored, warnings, notes)
+                              bone_side, mirrored, warnings, notes)
 
     def side_pair_hint(self) -> str:
         """Medial/lateral landmark pair whose swap looks like the other side."""

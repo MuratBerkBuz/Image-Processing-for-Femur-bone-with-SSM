@@ -15,7 +15,6 @@ landmark_guide.json.
 from __future__ import annotations
 
 import argparse
-import datetime
 import os
 import queue
 import subprocess
@@ -28,7 +27,7 @@ from tkinter import filedialog, messagebox, ttk
 import numpy as np
 
 from mesh_view import MeshView
-from reconstruction_engine import BoneReconstructor, load_guide, parse_landmark_text
+from reconstruction_engine import BoneReconstructor, load_guide, output_paths, parse_landmark_text
 from ssm_io import ROOT
 
 APP_TITLE = "Bone Reconstruction from Landmarks"
@@ -39,7 +38,6 @@ BG, PANEL, TEXT, MUTED = "#f4f5f7", "#ffffff", "#1d2433", "#5b6475"
 ACCENT, ACCENT_DARK = "#2563eb", "#1d4ed8"
 LANDMARK, SELECTED, ENTERED, FITTED = "#f2a33a", "#ff4d2e", "#e5484d", "#30c48d"
 WARN_BG, NOTE_BG = "#fff4e5", "#e8f1ff"
-SIDES = {"Auto-detect": "auto", "Same side as the model": "model", "Other side (mirror)": "other"}
 
 
 # ---------------------------------------------------------------------- helpers
@@ -169,6 +167,8 @@ class LandmarkPage(ttk.Frame):
         self.status: list[ttk.Label] = []
         self.entries: list[list[ttk.Entry]] = []
         self.selected = 0
+        self.input_name: str | None = None   # stem of the loaded landmark file, used in the output name
+        self.sides: dict[str, str] = {}
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
@@ -179,6 +179,8 @@ class LandmarkPage(ttk.Frame):
 
     def show_bone(self, rec: BoneReconstructor, keep_values: bool = False) -> None:
         old = [[v.get() for v in row] for row in self.vars] if keep_values and self.rec is rec else None
+        if old is None:
+            self.input_name = None
         self.rec = rec
         for w in self.panel.winfo_children():
             w.destroy()
@@ -231,9 +233,11 @@ class LandmarkPage(ttk.Frame):
         side = ttk.Frame(p, style="Panel.TFrame")
         side.pack(anchor="w", pady=(16, 0), fill="x")
         ttk.Label(side, text="Body side:", style="Panel.TLabel").pack(side="left")
+        self.sides = {"Auto-detect": "auto", f"Left {rec.bone.lower()}": "L", f"Right {rec.bone.lower()}": "R"}
         self.side = tk.StringVar(value="Auto-detect")
-        ttk.Combobox(side, textvariable=self.side, values=list(SIDES), state="readonly", width=24).pack(
+        ttk.Combobox(side, textvariable=self.side, values=list(self.sides), state="readonly", width=16).pack(
             side="left", padx=8)
+        ttk.Label(side, text=f"(model: {rec.side_label(rec.model_side)})", style="Muted.TLabel").pack(side="left")
 
         buttons = ttk.Frame(p, style="Panel.TFrame")
         buttons.pack(fill="x", pady=(20, 0))
@@ -310,6 +314,7 @@ class LandmarkPage(ttk.Frame):
             messagebox.showerror("Cannot paste", str(e), parent=self)
             return "break"
         self.set_values(coords, start=i)
+        self.input_name = None
         return "break"
 
     def paste_dialog(self) -> None:
@@ -331,6 +336,7 @@ class LandmarkPage(ttk.Frame):
                 messagebox.showerror("Cannot use these coordinates", str(e), parent=dlg)
                 return
             self.set_values(coords)
+            self.input_name = None
             dlg.destroy()
 
         row = ttk.Frame(dlg, style="Panel.TFrame")
@@ -352,11 +358,13 @@ class LandmarkPage(ttk.Frame):
             messagebox.showerror("Cannot load landmarks", f"{Path(path).name}:\n{e}", parent=self)
             return
         self.set_values(coords)
+        self.input_name = Path(path).stem
 
     def clear(self) -> None:
         for row in self.vars:
             for v in row:
                 v.set("")
+        self.input_name = None
         self.select(0)
         self.entries[0][0].focus_set()
 
@@ -367,7 +375,7 @@ class LandmarkPage(ttk.Frame):
         if any(self.row_values(i) is None for i in range(len(self.vars))):
             messagebox.showwarning("Missing values", "Enter x, y and z for every landmark first.", parent=self)
             return
-        self.app.reconstruct(self.rec, self.coordinates(), SIDES[self.side.get()])
+        self.app.reconstruct(self.rec, self.coordinates(), self.sides[self.side.get()], self.input_name)
 
 
 class ResultPage(ttk.Frame):
@@ -388,7 +396,7 @@ class ResultPage(ttk.Frame):
         for w in self.panel.winfo_children():
             w.destroy()
         p = self.panel
-        ttk.Label(p, text=f"Reconstructed {rec.bone.lower()}", style="Heading.TLabel").pack(anchor="w")
+        ttk.Label(p, text=f"Reconstructed {rec.side_label(result.side)}", style="Heading.TLabel").pack(anchor="w")
         pts = result.mesh.points
         up, front = rec.view_axes(result.fitted_landmarks)
         length = np.ptp(pts @ up)
@@ -402,6 +410,8 @@ class ResultPage(ttk.Frame):
         ttk.Button(buttons, text="Save STL as…", style="Accent.TButton", command=self.save_as).pack(side="left")
         ttk.Button(buttons, text="Open folder", command=lambda: open_folder(self.saved.parent)).pack(
             side="left", padx=8)
+        ttk.Button(buttons, text="New bone", command=self.app.show_choose).pack(side="right")
+        ttk.Button(buttons, text="← Edit landmarks", command=self.app.show_landmarks).pack(side="right", padx=8)
 
         for text, bg in [(n, NOTE_BG) for n in result.notes] + [(w, WARN_BG) for w in result.warnings]:
             tk.Label(p, text=text, background=bg, foreground=TEXT, wraplength=410, justify="left",
@@ -429,11 +439,6 @@ class ResultPage(ttk.Frame):
         for color, text in ((ENTERED, "entered landmarks"), (FITTED, "landmarks on the reconstructed bone")):
             tk.Label(legend, text="●", foreground=color, background=PANEL, font=("Segoe UI", 12)).pack(side="left")
             ttk.Label(legend, text=text, style="Muted.TLabel").pack(side="left", padx=(2, 12))
-
-        nav = ttk.Frame(p, style="Panel.TFrame")
-        nav.pack(fill="x", pady=(14, 0))
-        ttk.Button(nav, text="← Edit landmarks", command=self.app.show_landmarks).pack(side="left")
-        ttk.Button(nav, text="New bone", command=self.app.show_choose).pack(side="left", padx=8)
 
         self.view.set_mesh(result.mesh.points, result.mesh.faces)
         self.view.set_view(up, front)
@@ -565,14 +570,14 @@ class App(tk.Tk):
             self.show_landmarks(keep_values=False)
         self.run_task(lambda: BoneReconstructor(bone, guide=self.guide), done, "loading model")
 
-    def reconstruct(self, rec: BoneReconstructor, coords: np.ndarray, side: str = "auto") -> None:
+    def reconstruct(self, rec: BoneReconstructor, coords: np.ndarray, side: str = "auto",
+                    input_name: str | None = None) -> None:
         def work():
             result = rec.reconstruct(coords, side=side)
-            stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            stem = self.output_dir / f"{rec.bone.lower()}_{stamp}"
-            path = result.save_stl(stem.with_suffix(".stl"))
-            header = f"# {rec.bone} landmarks ({', '.join(rec.codes)}), x y z in mm\n"
-            lm_file = stem.parent / f"{stem.name}_landmarks.txt"
+            stl, lm_file = output_paths(self.output_dir, rec.bone, result.side, input_name)
+            path = result.save_stl(stl)
+            header = (f"# {rec.side_label(result.side)} landmarks ({', '.join(rec.codes)}), x y z in mm"
+                      + (f", from {input_name}" if input_name else "") + "\n")
             lm_file.write_text(header + "\n".join(" ".join(f"{v:.4f}" for v in row) for row in coords) + "\n")
             return result, path
 
@@ -622,6 +627,7 @@ def main():
                     app.show_error(ValueError(f"{args.landmarks}: {e}"))
                     return
                 page.set_values(coords)
+                page.input_name = args.landmarks.stem
                 if args.auto:
                     page.reconstruct()
         app.after(100, lambda: app.load_bone(bone))

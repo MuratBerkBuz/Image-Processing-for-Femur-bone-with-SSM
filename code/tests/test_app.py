@@ -52,10 +52,17 @@ def test_full_workflow(app, tmp_path, bone):
     page.reconstruct()
     app.update()
     stl = app.last_saved
-    assert stl.parent == tmp_path and stl.suffix == ".stl"
+    assert stl.parent == tmp_path and stl.name == f"001_{bone}_L_reconstructed.stl"
     assert len(read_stl(stl).faces) == len(app.last_result.mesh.faces)
-    saved_lm = np.loadtxt(stl.parent / f"{stl.stem}_landmarks.txt")
+    saved_lm = np.loadtxt(tmp_path / f"001_{bone}_L_landmarks.txt")
     assert np.allclose(saved_lm, coords)
+
+    # second run, with the values coming from a file: its name goes into the output name
+    app.show_landmarks()
+    page.input_name = "z036"
+    page.reconstruct()
+    app.update()
+    assert app.last_saved.name == f"002_z036_{bone}_L_reconstructed.stl"
     assert "Result" in [lbl.cget("text") for lbl in app.step_labels][2]
 
 

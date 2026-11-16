@@ -1,9 +1,10 @@
 {
-  "_comment": "Bones offered by bone_reconstruction_app.py. model_dir is relative to the WP5_reconstruction folder. Landmark codes must match <model_dir>/landmark_indices.txt; the order there is the order the user enters them. view: the bone is shown with the axis up_from -> up_to pointing up and the 'front' landmark facing the viewer. The descriptions are shown to the user and can be edited freely.",
+  "_comment": "Bones offered by bone_reconstruction_app.py. model_dir is relative to the WP5_reconstruction folder. side: body side of the bones the model was built from (L or R). Landmark codes must match <model_dir>/landmark_indices.txt; the order there is the order the user enters them. view: the bone is shown with the axis up_from -> up_to pointing up and the 'front' landmark facing the viewer. The descriptions are shown to the user and can be edited freely.",
   "bones": {
     "Femur": {
       "model_dir": "Femur_SSM_prealigned",
-      "description": "Left femur, 29 training bones",
+      "side": "L",
+      "description": "Left femur model, 29 training bones",
       "view": {"up_from": ["ME", "LE"], "up_to": "GT", "front": "PN"},
       "landmarks": {
         "ME": {"name": "Medial epicondyle",
@@ -18,7 +19,8 @@
     },
     "Tibia": {
       "model_dir": "Tibia_SSM_prealigned",
-      "description": "Tibia, 30 training bones",
+      "side": "R",
+      "description": "Right tibia model, 30 training bones",
       "view": {"up_from": ["MM"], "up_to": "IN", "front": "TT"},
       "landmarks": {
         "IN": {"name": "Inner notch",

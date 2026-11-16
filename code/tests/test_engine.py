@@ -4,7 +4,8 @@ import pytest
 
 from conftest import CODE_DIR
 from mesh_tools import SurfaceDistance, read_stl
-from reconstruction_engine import BoneReconstructor, available_bones, handedness, load_guide, parse_landmark_text
+from reconstruction_engine import (BoneReconstructor, available_bones, handedness, load_guide, output_paths,
+                                   parse_landmark_text)
 from ssm_io import ROOT
 
 EXAMPLES = CODE_DIR / "examples"
@@ -33,6 +34,24 @@ def test_guide_lists_both_bones():
         assert cfg["landmarks"] and all(v["name"] and v["description"] for v in cfg["landmarks"].values())
 
 
+def test_output_paths_numbering(tmp_path):
+    stl, lm = output_paths(tmp_path, "Tibia", "L")
+    assert stl.name == "001_Tibia_L_reconstructed.stl" and lm.name == "001_Tibia_L_landmarks.txt"
+    stl.write_text("x")
+    stl, _ = output_paths(tmp_path, "Tibia", "L", "z036")
+    assert stl.name == "002_z036_Tibia_L_reconstructed.stl"
+    (tmp_path / "017_old_Femur_R_reconstructed.stl").write_text("x")
+    (tmp_path / "notes.txt").write_text("x")
+    stl, _ = output_paths(tmp_path, "Femur", "R", "patient 7 (scan)")   # unsafe characters replaced
+    assert stl.name == "018_patient_7_scan_Femur_R_reconstructed.stl"
+    assert output_paths(tmp_path / "new_folder", "Femur", "L")[0].name == "001_Femur_L_reconstructed.stl"
+
+
+def test_guide_sides():
+    guide = load_guide()
+    assert guide["Femur"]["side"] == "L" and guide["Tibia"]["side"] == "R"
+
+
 def test_handedness_flips_with_mirror(rng):
     lm = rng.normal(size=(5, 3))
     assert np.sign(handedness(lm)) == -np.sign(handedness(lm * [-1, 1, 1]))
@@ -58,6 +77,7 @@ def example(reconstructor):
 def test_example_reconstructs(reconstructor, example, tmp_path):
     res = reconstructor.reconstruct(example)
     assert res.mirrored == (reconstructor.bone == "Tibia")   # the tibia example is from the other side
+    assert res.side == "L"            # left femur (as the model); left tibia (mirror of the right model)
     assert res.residuals.max() < 8 and not res.warnings
     assert SurfaceDistance(res.mesh)(example).max() < 5      # landmarks lie on the reconstructed surface
     path = res.save_stl(tmp_path / "bone.stl")
@@ -116,8 +136,11 @@ def test_swapped_landmarks_are_flagged(reconstructor, example):
 @pytest.mark.data
 def test_side_override(reconstructor, example):
     auto = reconstructor.reconstruct(example)
-    forced = reconstructor.reconstruct(example, side="other" if not auto.mirrored else "model")
-    assert forced.mirrored != auto.mirrored
+    other = {"L": "R", "R": "L"}[auto.side]
+    forced = reconstructor.reconstruct(example, side=other)
+    assert forced.side == other and forced.mirrored != auto.mirrored
     assert forced.residuals.mean() > auto.residuals.mean()   # the detected side fits better
+    same = reconstructor.reconstruct(example, side=auto.side)
+    assert np.allclose(same.mesh.points, auto.mesh.points)
     with pytest.raises(ValueError, match="side must be"):
         reconstructor.reconstruct(example, side="left")
