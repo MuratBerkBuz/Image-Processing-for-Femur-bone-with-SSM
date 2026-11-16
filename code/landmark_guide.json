@@ -1,0 +1,37 @@
+{
+  "_comment": "Bones offered by bone_reconstruction_app.py. model_dir is relative to the WP5_reconstruction folder. Landmark codes must match <model_dir>/landmark_indices.txt; the order there is the order the user enters them. view: the bone is shown with the axis up_from -> up_to pointing up and the 'front' landmark facing the viewer. The descriptions are shown to the user and can be edited freely.",
+  "bones": {
+    "Femur": {
+      "model_dir": "Femur_SSM_prealigned",
+      "description": "Left femur, 29 training bones",
+      "view": {"up_from": ["ME", "LE"], "up_to": "GT", "front": "PN"},
+      "landmarks": {
+        "ME": {"name": "Medial epicondyle",
+               "description": "The most prominent bony point on the inner (medial) side of the knee end of the femur, just above the medial condyle."},
+        "LE": {"name": "Lateral epicondyle",
+               "description": "The most prominent bony point on the outer (lateral) side of the knee end of the femur, just above the lateral condyle."},
+        "PN": {"name": "Patellar notch",
+               "description": "The deepest point of the patellar groove (trochlea) on the front of the knee end, between the two condyles, where the kneecap glides."},
+        "GT": {"name": "Greater trochanter",
+               "description": "The top (most proximal) point of the greater trochanter: the large bony prominence on the outer side of the hip end, lateral to the femoral neck."}
+      }
+    },
+    "Tibia": {
+      "model_dir": "Tibia_SSM_prealigned",
+      "description": "Tibia, 30 training bones",
+      "view": {"up_from": ["MM"], "up_to": "IN", "front": "TT"},
+      "landmarks": {
+        "IN": {"name": "Inner notch",
+               "description": "The centre of the tibial plateau between the medial and lateral condyles (intercondylar area), at the top of the tibia."},
+        "MC": {"name": "Medial condyle",
+               "description": "The most medial (inner) point of the medial tibial condyle, just below the rim of the plateau."},
+        "LC": {"name": "Lateral condyle",
+               "description": "The most lateral (outer) point of the lateral tibial condyle, just below the rim of the plateau."},
+        "TT": {"name": "Tibial tuberosity",
+               "description": "The most prominent point of the tibial tuberosity: the bump on the front of the tibia, about 4-5 cm below the plateau, where the patellar tendon attaches."},
+        "MM": {"name": "Medial malleolus",
+               "description": "The tip (most distal point) of the medial malleolus: the bony prominence on the inner side of the ankle."}
+      }
+    }
+  }
+}

@@ -40,12 +40,21 @@ class ShapeModel:
     @classmethod
     def from_exports(cls, bone_dir) -> "ShapeModel":
         bone_dir = Path(bone_dir)
+        if not bone_dir.is_dir():
+            raise FileNotFoundError(f"model folder not found: {bone_dir}")
         mean_files = sorted((bone_dir / "mean_shape_particles").glob("*.particles"))
         if len(mean_files) != 1:
-            raise FileNotFoundError(f"expected one mean .particles file, found {len(mean_files)}")
-        return cls(read_particles(mean_files[0]),
-                   read_eigenvectors(bone_dir / "eigenvectors"),
-                   read_eigenvalues(bone_dir / "eigenvalues" / "eigenvalues.eval"))
+            raise FileNotFoundError(
+                f"expected one mean .particles file in {bone_dir / 'mean_shape_particles'}, found {len(mean_files)}\n"
+                "Export it in ShapeWorks Studio: File > Export > Export Current Particles (PCA slider at 0).")
+        mean = read_particles(mean_files[0])
+        modes = read_eigenvectors(bone_dir / "eigenvectors")
+        ev = read_eigenvalues(bone_dir / "eigenvalues" / "eigenvalues.eval")
+        if modes.shape[0] != mean.size or modes.shape[1] != ev.size:
+            raise ValueError(f"{bone_dir}: exports do not fit together ({len(mean)} mean particles, "
+                             f"eigenvectors {modes.shape[0] // 3} particles x {modes.shape[1]} modes, "
+                             f"{ev.size} eigenvalues); re-export them from the same ShapeWorks project.")
+        return cls(mean, modes, ev)
 
     @classmethod
     def from_particles(cls, shapes: np.ndarray, n_modes: int | None = None,

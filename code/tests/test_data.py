@@ -13,10 +13,10 @@ from ssm_model import ShapeModel
 
 pytestmark = pytest.mark.data
 
+# The models the reconstruction uses. Femur_SSM / Tibia_SSM are kept only for comparison
+# and are not checked (their exports predate the last re-run of their projects).
 MODELS = {  # folder: (subjects, landmarks, built with scaling)
-    "Femur_SSM": (29, 4, True),
     "Femur_SSM_prealigned": (29, 4, False),
-    "Tibia_SSM": (30, 5, True),
     "Tibia_SSM_prealigned": (30, 5, False),
 }
 
@@ -91,7 +91,7 @@ def test_landmarks_lie_on_input_mesh(cohort):
 
 def test_new_bone_04_is_training_subject_103559():
     actual = ROOT / "new_bones_to_be_reconstructed" / "actual_bone_stls" / "04_Tibia_R.stl"
-    d = model_dir("Tibia_SSM")
+    d = model_dir("Tibia_SSM_prealigned")
     if not actual.exists():
         pytest.skip("new bones not found")
     subjects, _ = read_project(find_project(d))

@@ -76,15 +76,13 @@ def landmark_vertices(n_lat: int = 10, n_lon: int = 14) -> np.ndarray:
     return np.array([0, n - 1, eq, eq + n_lon // 4, eq + n_lon // 2, 1 + (n_lat // 4 - 1) * n_lon + 3])
 
 
-def make_project(root: Path, n_subjects: int = 10, scaled: bool = False, stale_names: bool = False,
-                 seed: int = 0) -> dict:
+def make_project(root: Path, n_subjects: int = 10, scaled: bool = False, seed: int = 0) -> dict:
     """Write a ShapeWorks-like project for a synthetic ellipsoid cohort.
 
     Layout: <root>/data_raw/<name>.stl (raw input, local frame) and
     <root>/Bone_SSM/ with groomed meshes, particles, exports, landmark files and
     a .swproj. world = alignment @ local; with ``scaled`` the alignment also
-    scales (like ShapeWorks landmark grooming). With ``stale_names`` the
-    .swproj refers to an old particles folder name.
+    scales (like ShapeWorks landmark grooming).
     """
     rng = np.random.default_rng(seed)
     proj = root / "Bone_SSM"
@@ -97,7 +95,7 @@ def make_project(root: Path, n_subjects: int = 10, scaled: bool = False, stale_n
     names = [f"s{i:02d}" for i in range(n_subjects)]
     template = ellipsoid()
     world, transforms, rows = [], [], []
-    pdir = "OLD_particles" if stale_names else "Bone_particles"
+    pdir = "Bone_particles"
     for name, ax in zip(names, axes):
         w = ellipsoid(ax)
         A = similarity(rng, scale=rng.uniform(0.85, 1.15) if scaled else 1.0)

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from conftest import make_project
-from ssm_io import (FOLDER_ALIASES, apply_transform, bone_name, default_align, find_project,
+from ssm_io import (apply_transform, bone_name, default_align, find_project,
                     landmarks_to_world, load_cohort, model_is_scaled, parse_matrix, read_eigenvectors,
                     read_landmark_coords, read_landmark_indices, read_particles, read_project, select_subjects,
                     transform_scale, write_landmark_indices, write_particles)
@@ -59,14 +59,6 @@ def test_bone_name(tmp_path, folder, expected):
     assert bone_name(tmp_path / folder) == expected
 
 
-def test_aliases_cover_all_renamed_folders():
-    for old in ("data_Femur_L", "raw_tibia_stls_from_matlab", "aligned_stls", "data_Femur_L_preprocessed",
-                "Tibia_L_preprocessed", "R053_try_particles", "R047_tibia_30_keast_vsd_particles",
-                "R054_tibia_keast_with_kabsch_alignment_particles",
-                "R038_Femur_30_stl_real_SSM_first_try_particles"):
-        assert old in FOLDER_ALIASES
-
-
 def test_read_project_resolves_paths(project):
     subjects, proj = read_project(find_project(project["dir"]))
     assert [s.name for s in subjects] == project["names"]
@@ -76,22 +68,48 @@ def test_read_project_resolves_paths(project):
     assert [lm["name"] for lm in proj["landmarks"]][:2] == ["A", "B"]
 
 
-def test_read_project_stale_particles_folder(tmp_path):
-    info = make_project(tmp_path, stale_names=True)
-    subjects, _ = read_project(find_project(info["dir"]))
-    assert all(s.world_particles.exists() and s.world_particles.parent.name == "Bone_particles" for s in subjects)
-
-
-def test_read_project_folder_alias(tmp_path):
+def test_missing_project_files_are_listed(tmp_path):
     info = make_project(tmp_path)
-    (tmp_path / "data_raw").rename(tmp_path / "data_femur_raw")
-    swproj = find_project(info["dir"])
-    proj = json.loads(swproj.read_text())
-    for row in proj["data"]:
-        row["shape_1"] = row["shape_1"].replace("data_raw", "data_Femur_L")
-    swproj.write_text(json.dumps(proj))
-    subjects, _ = read_project(swproj)
-    assert all(s.shape.exists() and s.shape.parent.name == "data_femur_raw" for s in subjects)
+    (info["dir"] / "Bone_particles" / "s03_groomed_world.particles").unlink()
+    (info["dir"] / "groomed" / "s05_groomed.vtk").unlink()
+    with pytest.raises(FileNotFoundError, match=r"(?s)2 file\(s\).*s03_groomed_world.*s05_groomed"):
+        read_project(find_project(info["dir"]))
+
+
+def test_missing_model_folder_and_project(tmp_path):
+    with pytest.raises(FileNotFoundError, match="model folder not found"):
+        find_project(tmp_path / "nowhere")
+    with pytest.raises(FileNotFoundError, match="found 0"):
+        find_project(tmp_path)
+
+
+def test_invalid_project_file(tmp_path):
+    (tmp_path / "bad.swproj").write_text("{not json")
+    with pytest.raises(ValueError, match="not a valid .swproj"):
+        read_project(tmp_path / "bad.swproj")
+    (tmp_path / "empty.swproj").write_text('{"data": []}')
+    with pytest.raises(ValueError, match="no subjects"):
+        read_project(tmp_path / "empty.swproj")
+
+
+def test_missing_and_bad_input_files(tmp_path):
+    with pytest.raises(FileNotFoundError, match="particles file not found"):
+        read_particles(tmp_path / "none.particles")
+    with pytest.raises(FileNotFoundError, match="landmark index file not found"):
+        read_landmark_indices(tmp_path / "none.txt")
+    (tmp_path / "text.particles").write_text("a b c\n")
+    with pytest.raises(ValueError, match="not a list of"):
+        read_particles(tmp_path / "text.particles")
+    (tmp_path / "empty.particles").write_text("")
+    with pytest.raises(ValueError, match="empty"):
+        read_particles(tmp_path / "empty.particles")
+
+
+def test_inconsistent_exports(project):
+    from ssm_model import ShapeModel
+    np.savetxt(project["dir"] / "eigenvalues" / "eigenvalues.eval", [1.0, 2.0, 3.0, 4.0])
+    with pytest.raises(ValueError, match="do not fit together"):
+        ShapeModel.from_exports(project["dir"])
 
 
 def test_read_project_empty_name_and_landmarks_next_to_shape(tmp_path):

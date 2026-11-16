@@ -1,6 +1,26 @@
 # WP5 code
 
-Requires numpy, scipy and pandas (`pip install -r requirements.txt`). ShapeWorks and VTK are not needed. Run all scripts from this folder. They work for any ShapeWorks model folder, chosen with `--bone-dir ../Femur_SSM` (the default) or `--bone-dir ../Tibia_SSM`. Output goes to `../results`.
+Requires numpy, scipy and pandas (`pip install -r requirements.txt`). ShapeWorks and VTK are not needed. Run all scripts from this folder. They work for any ShapeWorks model folder, chosen with `--bone-dir ../Femur_SSM_prealigned` (the default) or `--bone-dir ../Tibia_SSM_prealigned`. Output goes to `../results`.
+
+## Reconstruction app
+
+```bash
+python bone_reconstruction_app.py
+```
+
+1. Choose the femur or the tibia.
+2. Enter the x y z coordinates (mm) of each landmark, all measured in the same coordinate system (e.g. one CT scan). Selecting a row shows where the landmark lies on the 3D bone and how to find it. Values can be typed, pasted (several rows at once), or loaded from a file.
+3. The reconstructed bone is shown in the coordinate system of the entered landmarks and saved to `../results/reconstructions/<bone>_<date>_<time>.stl`, together with the entered landmarks. "Save STL as…" stores a copy elsewhere.
+
+The app uses the size-preserving models (`*_SSM_prealigned`). It estimates the bone's pose with a rigid fit and recognises a bone from the other body side by the handedness of its landmarks. In that case it reconstructs the mirror image and says so. It warns about a landmark far from the fitted bone (> 8 mm), a likely wrong landmark order, a shape outside the training range, and a size that suggests wrong units.
+
+Two example inputs are in `examples/`. Open the app on one directly with:
+
+```bash
+python bone_reconstruction_app.py --bone Femur --landmarks examples/femur_example.txt --auto
+```
+
+The bones offered, their model folders and the landmark descriptions are in `landmark_guide.json`, which can be edited without changing code. Modules: `bone_reconstruction_app.py` (window), `reconstruction_engine.py` (fit, checks, STL), `mesh_view.py` (3D view).
 
 | Script | README step | What it does |
 |---|---|---|
@@ -39,12 +59,13 @@ Pose estimation (`--align auto`) is similarity for a model groomed with scaling 
 
 | Folder | Content |
 |---|---|
-| `Femur_SSM`, `Tibia_SSM` | ShapeWorks models groomed with landmark alignment (scaled) |
+| `Femur_SSM`, `Tibia_SSM` | first ShapeWorks models (landmark-groomed, scaled); kept for comparison only, their exports no longer match the re-saved projects |
 | `Femur_SSM_prealigned`, `Tibia_SSM_prealigned` | ShapeWorks models built from `data_aligned` (no scaling) |
 | `data_femur_raw`, `data_tibia_raw` | raw input STLs |
 | `data_aligned/<Bone>` | output of `prealign_stls.py`: aligned STLs + landmarks |
+| `files_for_gui` | app icon |
 
-The .swproj files may still contain folder names from before the renaming. `ssm_io.FOLDER_ALIASES` maps them to the current names, so the projects work whether or not they are re-saved in Studio.
+Paths inside the .swproj files must match these folder names. A missing project, export or referenced file stops the scripts with an error that names the file.
 
 ## Tests
 
@@ -52,6 +73,8 @@ The .swproj files may still contain folder names from before the renaming. `ssm_
 python -m pytest            # all tests (data tests skip if a folder is missing)
 python -m pytest -m "not data"   # unit tests only, synthetic data, a few seconds
 ```
+
+`test_exports_match_particles` fails when a model's Studio exports (mean, eigenvectors, eigenvalues) are older than its particles. Re-export them in Studio to fix it. The app and the reconstruction do not depend on these exports: they build the PCA from the particles.
 
 ## Notes
 

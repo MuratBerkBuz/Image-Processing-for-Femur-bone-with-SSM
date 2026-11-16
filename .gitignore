@@ -16,6 +16,8 @@ Tibia_SSM*/
 data_*/
 new_bones_to_be_reconstructed/
 results/
+files_for_gui/
+code/examples/
 # python
 __pycache__/
 .pytest_cache/
